@@ -1,27 +1,31 @@
 import React, { createContext, useState, useContext, ReactNode, useEffect } from 'react';
-import { CartItem, Product } from '@/types/product';
+import { Product } from '@/types/product';
 import { useProducts } from './ProductContext';
 
+type CartProduct = Product & {
+  quantity: number;
+  color?: string;
+  size?: string;
+};
+
 type CartContextType = {
-  items: CartItem[];
-  addToCart: (productId: string, quantity?: number, color?: string, size?: string) => void;
-  removeFromCart: (productId: string) => void;
-  updateQuantity: (productId: string, quantity: number) => void;
+  cartProducts: CartProduct[];
+  addToCart: (productId: string, quantity: number, color?: string, size?: string) => void;
+  removeFromCart: (productId: string, color?: string, size?: string) => void;
+  updateQuantity: (productId: string, quantity: number, color?: string, size?: string) => void;
   clearCart: () => void;
-  totalItems: number;
   subtotal: number;
-  cartProducts: (Product & { quantity: number; color?: string; size?: string })[];
+  totalItems: number;
 };
 
 const CartContext = createContext<CartContextType>({
-  items: [],
+  cartProducts: [],
   addToCart: () => {},
   removeFromCart: () => {},
   updateQuantity: () => {},
   clearCart: () => {},
-  totalItems: 0,
   subtotal: 0,
-  cartProducts: [],
+  totalItems: 0,
 });
 
 export const useCart = () => useContext(CartContext);
@@ -31,97 +35,99 @@ type CartProviderProps = {
 };
 
 export const CartProvider = ({ children }: CartProviderProps) => {
-  const [items, setItems] = useState<CartItem[]>([]);
-  const { products } = useProducts();
-  const [totalItems, setTotalItems] = useState(0);
-  const [subtotal, setSubtotal] = useState(0);
-  const [cartProducts, setCartProducts] = useState<(Product & { quantity: number; color?: string; size?: string })[]>([]);
+  const [cartProducts, setCartProducts] = useState<CartProduct[]>([]);
+  const { getProductById } = useProducts();
 
-  // Update cart calculations whenever items or products change
-  useEffect(() => {
-    const count = items.reduce((sum, item) => sum + item.quantity, 0);
-    setTotalItems(count);
+  // Calculate subtotal
+  const subtotal = cartProducts.reduce(
+    (sum, item) => sum + (item.discountPrice || item.price) * item.quantity,
+    0
+  );
 
-    // Map cart items to their product details
-    const cartWithDetails = items.map(item => {
-      const product = products.find(p => p.id === item.productId);
-      if (!product) return null;
+  // Calculate total number of items
+  const totalItems = cartProducts.reduce((sum, item) => sum + item.quantity, 0);
 
-      const price = product.discountPrice || product.price;
-      return {
-        ...product,
-        quantity: item.quantity,
-        color: item.color,
-        size: item.size,
-      };
-    }).filter(Boolean) as (Product & { quantity: number; color?: string; size?: string })[];
+  // Add product to cart
+  const addToCart = (productId: string, quantity: number, color?: string, size?: string) => {
+    const product = getProductById(productId);
+    
+    if (!product) return;
 
-    setCartProducts(cartWithDetails);
-
-    // Calculate subtotal
-    const total = cartWithDetails.reduce(
-      (sum, item) => sum + (item.discountPrice || item.price) * item.quantity,
-      0
+    // Check if the product already exists in cart with the same color/size
+    const existingItemIndex = cartProducts.findIndex(
+      (item) => 
+        item.id === productId && 
+        item.color === color && 
+        item.size === size
     );
-    setSubtotal(total);
-  }, [items, products]);
 
-  const addToCart = (productId: string, quantity = 1, color?: string, size?: string) => {
-    setItems(prevItems => {
-      const existingItemIndex = prevItems.findIndex(
-        item => 
-          item.productId === productId && 
-          item.color === color && 
-          item.size === size
-      );
-
-      if (existingItemIndex >= 0) {
-        // Update quantity of existing item
-        const updatedItems = [...prevItems];
-        updatedItems[existingItemIndex] = {
-          ...updatedItems[existingItemIndex],
-          quantity: updatedItems[existingItemIndex].quantity + quantity,
-        };
-        return updatedItems;
-      } else {
-        // Add new item
-        return [...prevItems, { productId, quantity, color, size }];
-      }
-    });
-  };
-
-  const removeFromCart = (productId: string) => {
-    setItems(prevItems => prevItems.filter(item => item.productId !== productId));
-  };
-
-  const updateQuantity = (productId: string, quantity: number) => {
-    if (quantity <= 0) {
-      removeFromCart(productId);
-      return;
+    if (existingItemIndex !== -1) {
+      // Update quantity if it already exists
+      const updatedCart = [...cartProducts];
+      updatedCart[existingItemIndex].quantity += quantity;
+      setCartProducts(updatedCart);
+    } else {
+      // Add new item if it doesn't exist
+      setCartProducts([
+        ...cartProducts,
+        {
+          ...product,
+          quantity,
+          color,
+          size,
+        },
+      ]);
     }
+  };
 
-    setItems(prevItems =>
-      prevItems.map(item =>
-        item.productId === productId ? { ...item, quantity } : item
+  // Remove product from cart
+  const removeFromCart = (productId: string, color?: string, size?: string) => {
+    setCartProducts(
+      cartProducts.filter(
+        (item) => 
+          !(item.id === productId && 
+            item.color === color && 
+            item.size === size)
       )
     );
   };
 
+  // Update product quantity
+  const updateQuantity = (productId: string, quantity: number, color?: string, size?: string) => {
+    if (quantity <= 0) {
+      removeFromCart(productId, color, size);
+      return;
+    }
+
+    const updatedCart = cartProducts.map((item) => {
+      if (
+        item.id === productId && 
+        item.color === color && 
+        item.size === size
+      ) {
+        return { ...item, quantity };
+      }
+      return item;
+    });
+
+    setCartProducts(updatedCart);
+  };
+
+  // Clear the cart
   const clearCart = () => {
-    setItems([]);
+    setCartProducts([]);
   };
 
   return (
     <CartContext.Provider
       value={{
-        items,
+        cartProducts,
         addToCart,
         removeFromCart,
         updateQuantity,
         clearCart,
-        totalItems,
         subtotal,
-        cartProducts,
+        totalItems,
       }}
     >
       {children}

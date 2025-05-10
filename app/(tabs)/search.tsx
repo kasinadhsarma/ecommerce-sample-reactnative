@@ -1,6 +1,8 @@
+'use client';
+
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, FlatList } from 'react-native';
-import { useSearchParams } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
 import ScreenContainer from '@/components/layout/ScreenContainer';
 import SearchBar from '@/components/layout/SearchBar';
 import ProductCard from '@/components/product/ProductCard';
@@ -9,7 +11,7 @@ import { Search as SearchIcon } from 'lucide-react-native';
 
 export default function SearchScreen() {
   const { searchProducts, categories } = useProducts();
-  const params = useSearchParams();
+  const params = useLocalSearchParams();
   const initialQuery = params.q as string || '';
   const [searchResults, setSearchResults] = useState([]);
   const [query, setQuery] = useState(initialQuery);
